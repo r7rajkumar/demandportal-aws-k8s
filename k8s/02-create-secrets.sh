@@ -4,7 +4,7 @@
 # DO NOT commit actual secrets to git
 # ============================================================
 
-NAMESPACE="cloudrequest"
+NAMESPACE="demandportal"
 
 # Generate a strong secret key
 SECRET_KEY=$(openssl rand -hex 32)

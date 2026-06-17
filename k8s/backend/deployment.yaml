@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cloudrequest-backend
-  namespace: cloudrequest
+  namespace: demandportal
   labels:
     app: cloudrequest-backend
     tier: backend
@@ -111,7 +111,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: cloudrequest-backend-svc
-  namespace: cloudrequest
+  namespace: demandportal
   labels:
     app: cloudrequest-backend
 spec:

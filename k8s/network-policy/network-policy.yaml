@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-ingress
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   podSelector: {}
   policyTypes:
@@ -15,7 +15,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-frontend-to-backend
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   podSelector:
     matchLabels:
@@ -39,7 +39,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-ingress-to-frontend
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   podSelector:
     matchLabels:
@@ -60,7 +60,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-backend-to-postgres
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   podSelector:
     matchLabels:

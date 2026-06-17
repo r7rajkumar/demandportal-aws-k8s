@@ -36,7 +36,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: cloudrequest-ingress
-  namespace: cloudrequest
+  namespace: demandportal
   annotations:
     # Use NGINX ingress controller
     kubernetes.io/ingress.class: nginx

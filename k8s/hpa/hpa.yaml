@@ -4,7 +4,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: cloudrequest-backend-hpa
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -44,7 +44,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: cloudrequest-frontend-hpa
-  namespace: cloudrequest
+  namespace: demandportal
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
