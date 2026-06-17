@@ -7,7 +7,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: YOUR_EMAIL@example.com    # REPLACE with your email
+    email: test@example.com    # REPLACE with your email
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -23,7 +23,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: YOUR_EMAIL@example.com    # REPLACE with your email
+    email: test@example.com    # REPLACE with your email
     privateKeySecretRef:
       name: letsencrypt-staging
     solvers:
@@ -58,10 +58,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - YOUR_DOMAIN.com           # REPLACE with your domain
+    - demandportal-alb-1919591216.us-east-1.elb.amazonaws.com          # REPLACE with your domain
     secretName: cloudrequest-tls
   rules:
-  - host: YOUR_DOMAIN.com       # REPLACE with your domain
+  - host: demandportal-alb-1919591216.us-east-1.elb.amazonaws.com          # REPLACE with your domain
     http:
       paths:
       - path: /api
