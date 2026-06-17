@@ -1,4 +1,4 @@
-name: CloudRequest — CI/CD Pipeline
+name: demandportal — CI/CD Pipeline
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  PROJECT_NAME: cloudrequest
+  PROJECT_NAME: demandportal
 
 jobs:
   # ─────────────────────────────────────────────
@@ -247,7 +247,7 @@ jobs:
     - name: Deploy PostgreSQL
       run: |
         kubectl apply -f k8s/postgres/postgres.yaml
-        kubectl rollout status deployment/postgres -n cloudrequest --timeout=120s
+        kubectl rollout status deployment/postgres -n demandportal --timeout=120s
 
     - name: Deploy backend
       env:
@@ -263,7 +263,7 @@ jobs:
 
         echo "Waiting for backend rollout..."
         kubectl rollout status deployment/cloudrequest-backend \
-          -n cloudrequest --timeout=180s
+          -n demandportal --timeout=180s
 
     - name: Deploy frontend
       env:
@@ -278,7 +278,7 @@ jobs:
 
         echo "Waiting for frontend rollout..."
         kubectl rollout status deployment/cloudrequest-frontend \
-          -n cloudrequest --timeout=180s
+          -n demandportal --timeout=180s
 
     - name: Apply ingress and HPA
       run: |
@@ -288,16 +288,16 @@ jobs:
     - name: Verify deployment
       run: |
         echo "=== Pods ==="
-        kubectl get pods -n cloudrequest
+        kubectl get pods -n demandportal
 
         echo "=== Services ==="
-        kubectl get svc -n cloudrequest
+        kubectl get svc -n demandportal
 
         echo "=== Ingress ==="
-        kubectl get ingress -n cloudrequest
+        kubectl get ingress -n demandportal
 
         echo "=== HPA ==="
-        kubectl get hpa -n cloudrequest
+        kubectl get hpa -n demandportal
 
     - name: Run smoke test
       run: |
@@ -309,8 +309,8 @@ jobs:
       if: failure()
       run: |
         echo "Deployment failed - rolling back..."
-        kubectl rollout undo deployment/cloudrequest-backend -n cloudrequest || true
-        kubectl rollout undo deployment/cloudrequest-frontend -n cloudrequest || true
+        kubectl rollout undo deployment/cloudrequest-backend -n demandportal || true
+        kubectl rollout undo deployment/cloudrequest-frontend -n demandportal || true
         echo "Rollback complete"
 
     - name: Notify deployment status
