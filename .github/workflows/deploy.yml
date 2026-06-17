@@ -20,11 +20,11 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_DB: cloudrequest_test
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_pass
+          POSTGRES_USER: ${{ secrets.TEST_DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
         ports:
           - 5432:5432
         options: >-
@@ -60,14 +60,14 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
 
     - name: Install frontend dependencies
       run: |
         cd frontend
-        npm ci
+        npm install
 
     - name: Run frontend lint
       run: |
@@ -301,10 +301,9 @@ jobs:
 
     - name: Run smoke test
       run: |
-        WORKER_IP="${{ secrets.WORKER_PUBLIC_IP }}"
-        echo "Running health check against $WORKER_IP..."
+        echo "Running health check against ALB..."
         sleep 10
-        curl -f http://$WORKER_IP:30080/health || echo "Health check failed - check manually"
+        curl -f http://${{ secrets.APP_URL }}/health || echo "Health check failed - check manually"
 
     - name: Rollback on failure
       if: failure()
