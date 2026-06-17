@@ -1,5 +1,5 @@
 ---
-# ClusterIssuer - Let's Encrypt production
+# ClusterIssuer - Let's Encrypt production (ready for when you get a domain)
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -7,7 +7,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: test@example.com    # REPLACE with your email
+    email: test@example.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -15,7 +15,7 @@ spec:
         ingress:
           class: nginx
 ---
-# ClusterIssuer - Let's Encrypt staging (use for testing first)
+# ClusterIssuer - Let's Encrypt staging
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -23,7 +23,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: test@example.com    # REPLACE with your email
+    email: test@example.com
     privateKeySecretRef:
       name: letsencrypt-staging
     solvers:
@@ -38,11 +38,10 @@ metadata:
   name: cloudrequest-ingress
   namespace: demandportal
   annotations:
-    # Use NGINX ingress controller
     kubernetes.io/ingress.class: nginx
-    # TLS redirect
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # SSL disabled until real domain is configured
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
     # CORS
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-origin: "*"
@@ -52,16 +51,10 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     # Rate limiting
     nginx.ingress.kubernetes.io/limit-rps: "20"
-    # cert-manager - use staging first, then switch to prod
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - demandportal-alb-1919591216.us-east-1.elb.amazonaws.com          # REPLACE with your domain
-    secretName: cloudrequest-tls
   rules:
-  - host: demandportal-alb-1919591216.us-east-1.elb.amazonaws.com          # REPLACE with your domain
+  - host: demandportal-alb-1919591216.us-east-1.elb.amazonaws.com
     http:
       paths:
       - path: /api
@@ -85,7 +78,3 @@ spec:
             name: cloudrequest-frontend-svc
             port:
               number: 80
----
-# NOTE: If you don't have a domain, use NodePort access instead:
-# kubectl get svc -n ingress-nginx
-# Access via: http://<worker-public-ip>:30080
