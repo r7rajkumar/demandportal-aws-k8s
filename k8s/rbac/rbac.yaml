@@ -1,0 +1,78 @@
+---
+# ServiceAccount for backend pod
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudrequest-backend-sa
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest
+automountServiceAccountToken: false
+---
+# ServiceAccount for GitHub Actions deployer
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-actions-deployer
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest
+---
+# Role - deployer permissions (GitHub Actions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudrequest-deployer-role
+  namespace: cloudrequest
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list"]
+---
+# RoleBinding - bind deployer role to GitHub Actions SA
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudrequest-deployer-binding
+  namespace: cloudrequest
+subjects:
+- kind: ServiceAccount
+  name: github-actions-deployer
+  namespace: cloudrequest
+roleRef:
+  kind: Role
+  name: cloudrequest-deployer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole - read-only cluster info
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudrequest-node-reader
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudrequest-node-reader-binding
+subjects:
+- kind: ServiceAccount
+  name: github-actions-deployer
+  namespace: cloudrequest
+roleRef:
+  kind: ClusterRole
+  name: cloudrequest-node-reader
+  apiGroup: rbac.authorization.k8s.io

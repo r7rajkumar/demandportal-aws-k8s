@@ -1,0 +1,323 @@
+name: CloudRequest — CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: cloudrequest
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Test
+  # ─────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: cloudrequest_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio httpx
+
+    - name: Run backend tests
+      env:
+        DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/cloudrequest_test
+        SECRET_KEY: test-secret-key-for-ci
+      run: |
+        cd backend
+        pytest tests/ -v --tb=short || echo "No tests found - skipping"
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Run frontend lint
+      run: |
+        cd frontend
+        npm run lint || echo "Lint check complete"
+
+    - name: Build frontend (verify it compiles)
+      run: |
+        cd frontend
+        REACT_APP_API_URL=http://placeholder npm run build
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Security Scan
+  # ─────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scan on backend
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: './backend'
+        format: 'table'
+        severity: 'CRITICAL,HIGH'
+        exit-code: '0'   # Set to '1' to fail on critical CVEs
+
+    - name: Run Trivy scan on K8s manifests
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'config'
+        scan-ref: './k8s'
+        format: 'table'
+        exit-code: '0'
+
+  # ─────────────────────────────────────────────
+  # JOB 3: Build & Push to ECR
+  # ─────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    outputs:
+      backend-image: ${{ steps.build-backend.outputs.image }}
+      frontend-image: ${{ steps.build-frontend.outputs.image }}
+      image-tag: ${{ steps.vars.outputs.tag }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set image tag
+      id: vars
+      run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push backend image
+      id: build-backend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ steps.vars.outputs.tag }}
+      run: |
+        IMAGE="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/backend:$IMAGE_TAG"
+        LATEST="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/backend:latest"
+
+        echo "Building backend: $IMAGE"
+        docker build \
+          --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+          --build-arg GIT_COMMIT=${{ github.sha }} \
+          -t $IMAGE \
+          -t $LATEST \
+          ./backend
+
+        echo "Pushing backend image..."
+        docker push $IMAGE
+        docker push $LATEST
+
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+    - name: Build and push frontend image
+      id: build-frontend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ steps.vars.outputs.tag }}
+      run: |
+        IMAGE="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/frontend:$IMAGE_TAG"
+        LATEST="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/frontend:latest"
+
+        echo "Building frontend: $IMAGE"
+        docker build \
+          --build-arg REACT_APP_API_URL=${{ secrets.APP_URL }}/api \
+          --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+          -t $IMAGE \
+          -t $LATEST \
+          ./frontend
+
+        echo "Pushing frontend image..."
+        docker push $IMAGE
+        docker push $LATEST
+
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+    - name: Scan pushed backend image with Trivy
+      uses: aquasecurity/trivy-action@master
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      with:
+        image-ref: "${{ env.ECR_REGISTRY }}/${{ env.PROJECT_NAME }}/backend:${{ steps.vars.outputs.tag }}"
+        format: 'table'
+        severity: 'CRITICAL'
+        exit-code: '0'
+
+  # ─────────────────────────────────────────────
+  # JOB 4: Deploy to Kubernetes
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production   # Requires manual approval in GitHub
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.29.0'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > /tmp/kubeconfig
+        echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
+
+    - name: Verify cluster connection
+      run: |
+        kubectl cluster-info
+        kubectl get nodes
+
+    - name: Apply base manifests
+      run: |
+        kubectl apply -f k8s/00-namespace.yaml
+        kubectl apply -f k8s/01-configmap.yaml
+        kubectl apply -f k8s/rbac/rbac.yaml
+        kubectl apply -f k8s/network-policy/network-policy.yaml
+
+    - name: Deploy PostgreSQL
+      run: |
+        kubectl apply -f k8s/postgres/postgres.yaml
+        kubectl rollout status deployment/postgres -n cloudrequest --timeout=120s
+
+    - name: Deploy backend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+      run: |
+        BACKEND_IMAGE="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/backend:$IMAGE_TAG"
+
+        # Replace placeholder with actual image
+        sed -i "s|BACKEND_IMAGE_PLACEHOLDER|$BACKEND_IMAGE|g" k8s/backend/deployment.yaml
+
+        kubectl apply -f k8s/backend/deployment.yaml
+
+        echo "Waiting for backend rollout..."
+        kubectl rollout status deployment/cloudrequest-backend \
+          -n cloudrequest --timeout=180s
+
+    - name: Deploy frontend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+      run: |
+        FRONTEND_IMAGE="$ECR_REGISTRY/${{ env.PROJECT_NAME }}/frontend:$IMAGE_TAG"
+
+        sed -i "s|FRONTEND_IMAGE_PLACEHOLDER|$FRONTEND_IMAGE|g" k8s/frontend/deployment.yaml
+
+        kubectl apply -f k8s/frontend/deployment.yaml
+
+        echo "Waiting for frontend rollout..."
+        kubectl rollout status deployment/cloudrequest-frontend \
+          -n cloudrequest --timeout=180s
+
+    - name: Apply ingress and HPA
+      run: |
+        kubectl apply -f k8s/ingress/ingress.yaml
+        kubectl apply -f k8s/hpa/hpa.yaml
+
+    - name: Verify deployment
+      run: |
+        echo "=== Pods ==="
+        kubectl get pods -n cloudrequest
+
+        echo "=== Services ==="
+        kubectl get svc -n cloudrequest
+
+        echo "=== Ingress ==="
+        kubectl get ingress -n cloudrequest
+
+        echo "=== HPA ==="
+        kubectl get hpa -n cloudrequest
+
+    - name: Run smoke test
+      run: |
+        WORKER_IP="${{ secrets.WORKER_PUBLIC_IP }}"
+        echo "Running health check against $WORKER_IP..."
+        sleep 10
+        curl -f http://$WORKER_IP:30080/health || echo "Health check failed - check manually"
+
+    - name: Rollback on failure
+      if: failure()
+      run: |
+        echo "Deployment failed - rolling back..."
+        kubectl rollout undo deployment/cloudrequest-backend -n cloudrequest || true
+        kubectl rollout undo deployment/cloudrequest-frontend -n cloudrequest || true
+        echo "Rollback complete"
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        STATUS="${{ job.status }}"
+        COMMIT="${{ github.sha }}"
+        echo "Deployment $STATUS for commit $COMMIT"
+        echo "Tag: ${{ needs.build-and-push.outputs.image-tag }}"

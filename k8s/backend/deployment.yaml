@@ -1,0 +1,125 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudrequest-backend
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest-backend
+    tier: backend
+    version: "1.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5        # Keep last 5 rollout history
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1                # Add 1 extra pod during update
+      maxUnavailable: 0          # Never take pods down during update
+  selector:
+    matchLabels:
+      app: cloudrequest-backend
+  template:
+    metadata:
+      labels:
+        app: cloudrequest-backend
+        tier: backend
+        version: "1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Spread pods across nodes for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cloudrequest-backend
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: backend
+        image: BACKEND_IMAGE_PLACEHOLDER
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: cloudrequest-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: cloudrequest-secrets
+              key: database-url
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloudrequest-secrets
+              key: secret-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        # Liveness - restart if app is stuck
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Readiness - only send traffic when ready
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # Startup - give extra time on first start
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 30
+          periodSeconds: 10
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudrequest-backend-svc
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest-backend
+spec:
+  selector:
+    app: cloudrequest-backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+    protocol: TCP
+  type: ClusterIP

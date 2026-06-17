@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudrequest-frontend
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest-frontend
+    tier: frontend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: cloudrequest-frontend
+  template:
+    metadata:
+      labels:
+        app: cloudrequest-frontend
+        tier: frontend
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cloudrequest-frontend
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: frontend
+        image: FRONTEND_IMAGE_PLACEHOLDER
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudrequest-frontend-svc
+  namespace: cloudrequest
+  labels:
+    app: cloudrequest-frontend
+spec:
+  selector:
+    app: cloudrequest-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  type: ClusterIP

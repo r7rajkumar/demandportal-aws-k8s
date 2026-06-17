@@ -1,0 +1,77 @@
+---
+# Default deny all ingress in namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: cloudrequest
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+# Allow frontend -> backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: cloudrequest
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudrequest-backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: cloudrequest-frontend
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+---
+# Allow ingress-nginx -> frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: cloudrequest
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudrequest-frontend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80
+---
+# Allow backend -> postgres only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-postgres
+  namespace: cloudrequest
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: cloudrequest-backend
+    ports:
+    - protocol: TCP
+      port: 5432

@@ -1,0 +1,24 @@
+# Terraform
+terraform/*.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+
+# Secrets
+*.pem
+*.key
+kubeconfig
+kubeconfig*
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Node
+node_modules/
+frontend/build/
+
+# OS
+.DS_Store

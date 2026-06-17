@@ -1,0 +1,20 @@
+# Copy this file to terraform.tfvars and fill in your values
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region   = "us-east-1"
+project_name = "cloudrequest"
+environment  = "production"
+
+# Your existing VPC ID
+vpc_id = "vpc-xxxxxxxxxxxxxxxxx"
+
+# Your IP for SSH access - get it from https://checkip.amazonaws.com
+your_ip_cidr = "YOUR_IP/32"
+
+# Path to your SSH public key
+public_key_path = "~/.ssh/id_rsa.pub"
+
+# Instance types
+master_instance_type = "t3.medium"
+worker_instance_type = "t3.medium"
+worker_count         = 2
